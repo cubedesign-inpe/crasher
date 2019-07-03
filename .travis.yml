@@ -10,5 +10,3 @@ install:
    - platformio update
 script:
    - platformio run
-
-# Template
