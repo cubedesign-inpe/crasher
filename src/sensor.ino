@@ -57,7 +57,7 @@ byte SensorInit(void)
     bz = 0;
 
     if(Model == MODEL_CANSAT)
-    {  
+    {
         if (!bmp.begin()) 
         {
             Serial.println("Could not find a valid PRESSURE sensor, check wiring!");

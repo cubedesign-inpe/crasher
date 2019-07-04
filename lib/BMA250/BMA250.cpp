@@ -1,215 +1,236 @@
-/**************************************************************************/
-/*
-        Distributed with a free-will license.
-        Use it any way you want, profit or free, provided it fits in the licenses of its associated works.
-        BMA250
-        This code is designed to work with the BMA250_I2CS I2C Mini Module available from ControlEverything.com.
-        https://shop.controleverything.com/products/3-axis-12-bit-8-bit-digital-accelerometer
- */
-/**************************************************************************/
+// I2Cdev library collection - BMA250 I2C device class header file
+// Based on BMA250 datasheet, 29/05/2008
+// 01/18/2012 by Brian McCain <bpmccain@gmail.com>
+// Updates should (hopefully) always be available at https://github.com/jrowberg/i2cdevlib
+//
+// Changelog:
+//     2012-01-18 - initial release
 
-#if ARDUINO >= 100
-#include "Arduino.h"
-#else
-#include "WProgram.h"
-#endif
+/* ============================================
+I2Cdev device library code is placed under the MIT license
+Copyright (c) 2011 Jeff Rowberg
 
-#include <Wire.h>
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+===============================================
+*/
 
 #include "BMA250.h"
 
-/**************************************************************************/
-/*
-        Abstract away platform differences in Arduino wire library
-*/
-/**************************************************************************/
-static uint8_t i2cread(void)
-{
-    #if ARDUINO >= 100
-        return Wire.read();
-    #else
-        return Wire.receive();
-    #endif
+/** Default constructor, uses default I2C address.
+ * @see BMA250_DEFAULT_ADDRESS
+ */
+BMA250::BMA250() {
+    devAddr = BMA250_DEFAULT_ADDRESS;
 }
 
-/**************************************************************************/
-/*
-        Abstract away platform differences in Arduino wire library
-*/
-/**************************************************************************/
-static void i2cwrite(uint8_t x)
-{
-    #if ARDUINO >= 100
-        Wire.write((uint8_t)x);
-    #else
-        Wire.send(x);
-    #endif
+/** Specific address constructor.
+ * @param address I2C address
+ * @see BMA250_DEFAULT_ADDRESS
+ * @see BMA250_ADDRESS_00
+ */
+BMA250::BMA250(uint8_t address) {
+    devAddr = address;
 }
 
-/**************************************************************************/
-/*
-        Writes 8-bits to the specified destination register
-*/
-/**************************************************************************/
-static void writeRegister(uint8_t i2cAddress, uint8_t reg, uint8_t value)
-{
-    Wire.beginTransmission(i2cAddress);
-    i2cwrite((uint8_t)reg);
-    i2cwrite((uint8_t)(value));
-    Wire.endTransmission();
+/** Power on and prepare for general usage. This sets the full scale range of 
+ * the sensor, as well as the bandwidth
+ */
+void BMA250::initialize() {
+	setRange(BMA250_RANGE_2G);
+	setBandwidth(BMA250_BW_125HZ);
 }
 
-/**************************************************************************/
-/*
-        Reads 8-bits to the specified destination register
-*/
-/**************************************************************************/
-static uint8_t readRegister(uint8_t i2cAddress, uint8_t reg)
-{
-    Wire.beginTransmission(i2cAddress);
-    i2cwrite((uint8_t)reg);
-    Wire.endTransmission();
-    Wire.requestFrom(i2cAddress, (uint8_t)1);
-    return (uint8_t)(i2cread());
+/** Reset sensor
+ */
+void BMA250::reset() {
+	I2Cdev::writeByte(devAddr, BMA250_RA_SOFT_RESET, 0xB6);
+}
+
+/** Verify the I2C connection.
+ * Make sure the device is connected and responds as expected.
+ * @return True if connection is valid, false otherwise
+ */
+bool BMA250::testConnection() {
+    byte id = getDeviceID();
+    if(id == 0xFA) return true;  // BMA280  -> K mouser
+    if(id == 0xFB) return true;  // BMA280  -> K mouser (datasheet Register 0x00 desc)
+    if(id == 0xF9) return true;  // BMA250E -> I ali
+    if(id == 0x03) return true;  // BMA250  -> 8 ali
+    return false;
+}
+
+// CHIP_ID register
+/** Get Device ID.
+ * This register is used to verify the identity of the device (0b010).
+ * @return Device ID (should be 2 dec)
+ * @see BMA250_RA_CHIP_ID
+ */
+uint8_t BMA250::getDeviceID() {
+    I2Cdev::readByte(devAddr, BMA250_RA_CHIP_ID, buffer);
+    return buffer[0];
 }
 
 
-/**************************************************************************/
-/*
-        Instantiates a new BMA250 class with appropriate properties
-        Accelerometer Address
-*/
-/**************************************************************************/
-void BMA250::getAddr_BMA250(uint8_t i2cAddress)
-{
-    bma_i2cAddress = i2cAddress;
+// VERSION register
+/** Get Chip Revision number
+ * @return Chip Revision
+ * @see BMA250_RA_VERSION
+ */
+ uint8_t BMA250::getChipRevision() {
+    I2Cdev::readByte(devAddr, BMA250_RA_VERSION, buffer);
+    return buffer[0];
+}
+		
+// AXIS registers
+/** Get 3-axis accelerometer readings.
+ * @param x 16-bit signed integer container for X-axis acceleration
+ * @param y 16-bit signed integer container for Y-axis acceleration
+ * @param z 16-bit signed integer container for Z-axis acceleration
+ * @see BMA250_RA_Y_AXIS_LSB
+ */
+
+void BMA250::getAcceleration(int16_t* x, int16_t* y, int16_t* z) {
+    I2Cdev::readBytes(devAddr, BMA250_RA_X_AXIS_LSB, 6, buffer);
+    *x = ((((int16_t)buffer[1]) << 8) | (int16_t)buffer[0]) >> (8-BMA250_X_AXIS_LSB_LENGTH);
+    *y = ((((int16_t)buffer[3]) << 8) | (int16_t)buffer[2]) >> (8-BMA250_Y_AXIS_LSB_LENGTH);
+    *z = ((((int16_t)buffer[5]) << 8) | (int16_t)buffer[4]) >> (8-BMA250_Y_AXIS_LSB_LENGTH);
 }
 
-/**************************************************************************/
-/*
-        Sets up the Hardware
-*/
-/**************************************************************************/
-bool BMA250::begin()
-{
-    Wire.begin();
-    
-    uint8_t chipid = readRegister(bma_i2cAddress, BMA250_REG_ACCEL_CHIP_ID);
-    if (chipid != BMA250_DEFAULT_CHIP_ID)
-        return false;
-    
-    // Set up the sensor for Accelerometer
-    // setUpSensor();
-    
-    return true;
+/** Get X-axis accelerometer reading.
+ * @return X-axis acceleration measurement in 16-bit 2's complement format
+ * @see BMA250_RA_X_AXIS_LSB
+ */
+int16_t BMA250::getAccelerationX() {
+    I2Cdev::readBytes(devAddr, BMA250_RA_X_AXIS_LSB, 2, buffer);
+    return ((((int16_t)buffer[1]) << 8) | buffer[0]) >> (8-BMA250_X_AXIS_LSB_LENGTH);
 }
 
-/**************************************************************************/
-/*
-        Sets the Full Scale Range of the Accelerometer Outputs
-*/
-/**************************************************************************/
-void BMA250::setAccelRange(bmaAccelRange_t accelrange)
-{
-    bma_accelrange = accelrange;
+/** Get Y-axis accelerometer reading.
+ * @return Y-axis acceleration measurement in 16-bit 2's complement format
+ * @see BMA250_RA_Y_AXIS_LSB
+ */
+int16_t BMA250::getAccelerationY() {
+    I2Cdev::readBytes(devAddr, BMA250_RA_Y_AXIS_LSB, 2, buffer);
+    return ((((int16_t)buffer[1]) << 8) | buffer[0]) >> (8-BMA250_Y_AXIS_LSB_LENGTH);
 }
 
-/**************************************************************************/
-/*
-        Gets the Full Scale Range of the Accelerometer Outputs
-*/
-/**************************************************************************/
-bmaAccelRange_t BMA250::getAccelRange()
-{
-    return bma_accelrange;
+/** Get Z-axis accelerometer reading.
+ * @return Z-axis acceleration measurement in 16-bit 2's complement format
+ * @see BMA250_RA_Z_AXIS_LSB
+ */
+int16_t BMA250::getAccelerationZ() {
+    I2Cdev::readBytes(devAddr, BMA250_RA_Z_AXIS_LSB, 2, buffer);
+    return ((((int16_t)buffer[1]) << 8) | buffer[0]) >> (8-BMA250_Z_AXIS_LSB_LENGTH);
 }
 
-/**************************************************************************/
-/*
-        Sets the Selection of the Bandwidth for the Acceleration Data
-*/
-/**************************************************************************/
-void BMA250::setAccelBandwidth(bmaAccelBandwidth_t accelbandwidth)
-{
-    bma_accelbandwidth = accelbandwidth;
+/** Check for new X axis acceleration data.
+ * @return New X-Axis Data Status
+ * @see BMA250_RA_X_AXIS_LSB
+ */
+bool BMA250::newDataX() {
+    I2Cdev::readBit(devAddr, BMA250_RA_X_AXIS_LSB, BMA250_X_NEW_DATA_BIT, buffer);
+	return buffer[0];
 }
 
-/**************************************************************************/
-/*
-        Gets the Selection of the Bandwidth for the Acceleration Data
-*/
-/**************************************************************************/
-bmaAccelBandwidth_t BMA250::getAccelBandwidth()
-{
-    return bma_accelbandwidth;
+/** Check for new Y axis acceleration data.
+ * @return New Y-Axis Data Status
+ * @see BMA250_RA_Y_AXIS_LSB
+ */
+bool BMA250::newDataY() {
+    I2Cdev::readBit(devAddr, BMA250_RA_Y_AXIS_LSB, BMA250_Y_NEW_DATA_BIT, buffer);
+	return buffer[0];
 }
 
-/**************************************************************************/
-/*
-        Sets up the Sensor for Accelerometer
-*/
-/**************************************************************************/
-void BMA250::setUpSensor(void)
-{
-    // Set Up the Configuration for the Accelerometer g-Range Register
-    // Full Scale Range of the Accelerometer Outputs
-    uint8_t accel_range = bma_accelrange;
-    
-    // Write the configuration to the Accelerometer g-Range Register
-    writeRegister(bma_i2cAddress, BMA250_REG_ACCEL_G_RANGE, accel_range);
-    
-    // Wait for the configuration to complete
-    delay(bma_conversionDelay);
-    
-    // Set Up the Configuration for the Accelerometer Bandwidth Register
-    // Set the Selection of the Bandwidth for the Acceleration Data
-    uint8_t bandwidth = bma_accelbandwidth;
-    
-    // Write the configuration to the Accelerometer Bandwidth Register
-    writeRegister(bma_i2cAddress, BMA250_REG_ACCEL_BANDWIDTH, bandwidth);
-    
-    // Wait for the configuration to complete
-    delay(bma_conversionDelay);
+/** Check for new Z axis acceleration data.
+ * @return New Z-Axis Data Status
+ * @see BMA250_RA_Z_AXIS_LSB
+ */
+bool BMA250::newDataZ() {
+    I2Cdev::readBit(devAddr, BMA250_RA_Z_AXIS_LSB, BMA250_Z_NEW_DATA_BIT, buffer);
+	return buffer[0];
+}
+				
+// TEMP register
+/** Check for current temperature
+ * @return Current Temperature in 0.5C increments from -30C at 00h
+ * @see BMA250_RA_TEMP_RD
+ */
+int8_t BMA250::getTemperature() {
+    I2Cdev::readByte(devAddr, BMA250_RA_TEMP_RD, buffer);
+    return buffer[0];
+}
+	
+// RANGE / BANDWIDTH registers
 
+/** Get Sensor Full Range
+ * @return Current Sensor Full Scale Range
+ * 0 = +/- 2G
+ * 1 = +/- 4G
+ * 2 = +/- 8G
+ * @see BMA250_RA_RANGE_BWIDTH
+ * @see BMA250_RANGE_BIT
+ * @see BMA250_RANGE_LENGTH
+ */
+uint8_t BMA250::getRange() {
+    I2Cdev::readByte(devAddr, BMA250_RA_PMU_RANGE, buffer);
+    return buffer[0];
 }
 
-/**************************************************************************/
-/*
-        Reads the 3 axes of the Accelerometer
-        The value is expressed in 16 bit as two’s complement
-*/
-/**************************************************************************/
-void BMA250::Measure_Accelerometer()
-{
-    // Read the Accelerometer
-    uint8_t xAccelLo, xAccelHi, yAccelLo, yAccelHi, zAccelLo, zAccelHi;
-    
-    // Read the Data
-    // Reading the Low X-Axis Acceleration Data Register
-    xAccelLo = readRegister(bma_i2cAddress, BMA250_REG_ACCEL_ACCEL_X_LSB);
-    // Reading the High X-Axis Acceleration Data Register
-    xAccelHi = readRegister(bma_i2cAddress, BMA250_REG_ACCEL_ACCEL_X_MSB);
-    // Conversion of the result
-    // 16-bit signed result for X-Axis Acceleration Data of BMA250
-    bma_accelData.X = (int16_t)((xAccelHi << 8) | xAccelLo);
-    bma_accelData.X >>= 6;
-    
-    // Reading the Low Y-Axis Acceleration Data Register
-    yAccelLo = readRegister(bma_i2cAddress, BMA250_REG_ACCEL_ACCEL_Y_LSB);
-    // Reading the High Y-Axis Acceleration Data Register
-    yAccelHi = readRegister(bma_i2cAddress, BMA250_REG_ACCEL_ACCEL_Y_MSB);
-    // Conversion of the result
-    // 16-bit signed result for Y-Axis Acceleration Data of BMA250
-    bma_accelData.Y = (int16_t)((yAccelHi << 8) | yAccelLo);
-    bma_accelData.Y >>= 6;
-    
-    // Reading the Low Z-Axis Acceleration Data Register
-    zAccelLo = readRegister(bma_i2cAddress, BMA250_REG_ACCEL_ACCEL_Z_LSB);
-    // Reading the High Z-Axis Acceleration Data Register
-    zAccelHi = readRegister(bma_i2cAddress, BMA250_REG_ACCEL_ACCEL_Z_MSB);
-    // Conversion of the result
-    // 16-bit signed result for Z-Axis Acceleration Data of BMA250
-    bma_accelData.Z = (int16_t)((zAccelHi << 8) | zAccelLo);
-    bma_accelData.Z >>= 6;
+/** Set Sensor Full Range
+ * @param range New full-scale range value
+ * @see getRange()
+ * @see BMA250_RA_RANGE_BWIDTH
+ * @see BMA250_RANGE_BIT
+ * @see BMA250_RANGE_LENGTH
+ */
+void BMA250::setRange(uint8_t range) {
+    I2Cdev::writeByte(devAddr, BMA250_RA_PMU_RANGE, range);
 }
 
+
+/** Get digital filter bandwidth.
+ * The bandwidth parameter is used to setup the digital filtering of ADC output data to obtain
+ * the desired bandwidth.
+ * @return Current Sensor Bandwidth
+ * 0 = 25Hz
+ * 1 = 50Hz
+ * 2 = 100Hz
+ * 3 = 190Hz
+ * 4 = 375Hz
+ * 5 = 750Hz
+ * 6 = 2500Hz
+ * @see BMA250_RA_RANGE_BWIDTH
+ * @see BMA250_RANGE_BIT
+ * @see BMA250_RANGE_LENGTH
+ */
+uint8_t BMA250::getBandwidth() {
+    I2Cdev::readByte(devAddr, BMA250_RA_PMU_BW, buffer);
+    return buffer[0];
+}
+
+/** Set Sensor Full Range
+ * @param bandwidth New bandwidth value
+ * @see getBandwidth()
+ * @see BMA250_RA_RANGE_BWIDTH
+ * @see BMA250_RANGE_BIT
+ * @see BMA250_RANGE_LENGTH
+ */
+void BMA250::setBandwidth(uint8_t bandwidth) {
+    I2Cdev::writeByte(devAddr, BMA250_RA_PMU_BW, bandwidth);
+}

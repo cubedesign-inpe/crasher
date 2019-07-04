@@ -1,157 +1,174 @@
-/**************************************************************************/
-/*
-        Distributed with a free-will license.
-        Use it any way you want, profit or free, provided it fits in the licenses of its associated works.
-        BMA250
-        This code is designed to work with the BMA250_I2CS I2C Mini Module available from ControlEverything.com.
-        https://shop.controleverything.com/products/3-axis-12-bit-8-bit-digital-ACCELEROMETER AND GYROSCOPE
+// I2Cdev library collection - BMA250 I2C device class header file
+// Based on BMA250 datasheet, 29/05/2008
+// 01/18/2012 by Brian McCain <bpmccain@gmail.com>
+// Updates should (hopefully) always be available at https://github.com/jrowberg/i2cdevlib
+//
+// Changelog:
+//     2012-01-18 - initial release
+
+/* ============================================
+I2Cdev device library code is placed under the MIT license
+Copyright (c) 2011 Jeff Rowberg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+===============================================
 */
-/**************************************************************************/
 
-#if ARDUINO >= 100
-#include "Arduino.h"
-#else
-#include "WProgram.h"
-#endif
+#ifndef _BMA250_H_
+#define _BMA250_H_
 
-#include <Wire.h>
+#include "I2Cdev.h"
 
-/**************************************************************************
-    I2C ADDRESS/BITS
-**************************************************************************/
-    #define BMA250_DEFAULT_ADDRESS_ACCEL                        (0x18)
-    #define BMA250_ADDRESS_ACCEL_UPDATED                        (0x69)
-    #define BMA250_DEFAULT_CHIP_ID                              (0x21)
+#define BMA250_ADDRESS_00           0x18                // Default Address
+#define BMA250_ADDRESS_01           0x19                // Used on the Atmel ATAVRSBIN1
+#define BMA250_DEFAULT_ADDRESS      BMA250_ADDRESS_00
 
-/**************************************************************************
-    CONVERSION DELAY (in mS)
-**************************************************************************/
-    #define BMA250_CONVERSIONDELAY                              (100)
+#define BMA250_RA_CHIP_ID           0x00
+#define BMA250_RA_VERSION           0x01
+#define BMA250_RA_X_AXIS_LSB        0x02
+#define BMA250_RA_X_AXIS_MSB        0x03
+#define BMA250_RA_Y_AXIS_LSB        0x04
+#define BMA250_RA_Y_AXIS_MSB        0x05
+#define BMA250_RA_Z_AXIS_LSB        0x06
+#define BMA250_RA_Z_AXIS_MSB        0x07
+#define BMA250_RA_TEMP_RD           0x08
+#define BMA250_RA_INT_STATUS_0      0x09
+#define BMA250_RA_INT_STATUS_1      0x0a
+#define BMA250_RA_INT_STATUS_2      0x0b
+#define BMA250_RA_INT_STATUS_3      0x0c
+#define BMA250_RA_FIFO_STATUS       0x0e
+#define BMA250_RA_PMU_RANGE         0x0f
+#define BMA250_RA_PMU_BW            0x10
+#define BMA250_RA_PMU_LPW           0x11
+#define BMA250_RA_PMU_LOW_POWER     0x12
+#define BMA250_RA_ACCD_HBW          0x13
+#define BMA250_RA_SOFT_RESET        0x14
+#define BMA250_RA_INT_EN_0          0x16
+#define BMA250_RA_INT_EN_1          0x17
+#define BMA250_RA_INT_EN_2          0x18
+#define BMA250_RA_INT_MAP_0         0x19
+#define BMA250_RA_INT_MAP_1         0x1a
+#define BMA250_RA_INT_MAP_2         0x1b
+#define BMA250_RA_INT_SRC           0x1e
+#define BMA250_RA_INT_OUT_CTRL      0x20
+#define BMA250_RA_INT_RST_LATCH     0x21
+#define BMA250_RA_INT_0             0x22
+#define BMA250_RA_INT_1             0x23
+#define BMA250_RA_INT_2             0x24
+#define BMA250_RA_INT_3             0x25
+#define BMA250_RA_INT_4             0x26
+#define BMA250_RA_INT_5             0x27
+#define BMA250_RA_INT_6             0x28
+#define BMA250_RA_INT_7             0x29
+#define BMA250_RA_INT_8             0x2A
+#define BMA250_RA_INT_9             0x2B
+#define BMA250_RA_INT_A             0x2C
+#define BMA250_RA_INT_B             0x2D
+#define BMA250_RA_INT_C             0x2E
+#define BMA250_RA_INT_D             0x2F
+#define BMA250_RA_FIFO_CONFIG_0     0x30
+#define BMA250_RA_PMU_SELF_TEST     0x32
+#define BMA250_RA_TRIM_NVM_CTRL     0x33
+#define BMA250_RA_SPI3_WDT          0x34
+#define BMA250_RA_OFC_CTRL          0x36
+#define BMA250_RA_OFC_SETTING       0x37
+#define BMA250_RA_OFC_OFFSET_X      0x38
+#define BMA250_RA_OFC_OFFSET_Y      0x39
+#define BMA250_RA_OFC_OFFSET_Z      0x3A
+#define BMA250_RA_TRIM_GP0          0x3B
+#define BMA250_RA_TRIM_GP1          0x3C
+#define BMA250_RA_FIFO_CONFIG_1     0x3D
+#define BMA250_RA_FIFO_DATA         0x3F
 
-/**************************************************************************
-    ACCELEROMETER REGISTERS
-**************************************************************************/
-    #define BMA250_REG_ACCEL_CHIP_ID                            (0x00)      // Chip Identification Number Register
-    #define BMA250_REG_ACCEL_ACCEL_X_LSB                        (0x02)      // X-Axis Accelerometer Low Data Register
-    #define BMA250_REG_ACCEL_ACCEL_X_MSB                        (0x03)      // X-Axis Accelerometer High Data Register
-    #define BMA250_REG_ACCEL_ACCEL_Y_LSB                        (0x04)      // Y-Axis Accelerometer Low Data Register
-    #define BMA250_REG_ACCEL_ACCEL_Y_MSB                        (0x05)      // Y-Axis Accelerometer High Data Register
-    #define BMA250_REG_ACCEL_ACCEL_Z_LSB                        (0x06)      // Z-Axis Accelerometer Low Data Register
-    #define BMA250_REG_ACCEL_ACCEL_Z_MSB                        (0x07)      // Z-Axis Accelerometer High Data Register
-    #define BMA250_REG_ACCEL_TEMP                               (0x08)      // Temperature Data Register
-    #define BMA250_REG_ACCEL_INTR_STATUS                        (0x09)      // Interrupt Status Register
-    #define BMA250_REG_ACCEL_NEW_STATUS                         (0x0A)      // New Data Status Register
-    #define BMA250_REG_ACCEL_TAP_SLOPE_STATUS                   (0x0B)      // Tap and Slope Interrupt Status Register
-    #define BMA250_REG_ACCEL_FLAT_ORIENT_STATUS                 (0x0C)      // Flat and Orientation Status Register
-    #define BMA250_REG_ACCEL_G_RANGE                            (0x0F)      // G-Range Selection Register
-    #define BMA250_REG_ACCEL_BANDWIDTH                          (0x10)      // Selection of the Bandwidth for the Acceleration Data Register
-    #define BMA250_REG_ACCEL_POWER                              (0x11)      // Configuration of the Power Modes Register
-    #define BMA250_REG_ACCEL_SPECIAL_CNTL                       (0x13)      // Selection of the Acceleration Data Acquisition and Data Output Format Register
-     #define BMA250_REG_ACCEL_SOFTRESET                         (0x14)      // SoftReset Register
-    #define BMA250_REG_ACCEL_INTERRUPT_SETTING1                 (0x16)      // Interrupt Settings Register
-    #define BMA250_REG_ACCEL_INTERRUPT_SETTING2                 (0x17)      // Interrupt Settings Register
-    #define BMA250_REG_ACCEL_INTERRUPT_MAPPING1                 (0x19)      // Interrupt Mapping Register
-    #define BMA250_REG_ACCEL_INTERRUPT_MAPPING2                 (0x1A)      // Interrupt Mapping Register
-    #define BMA250_REG_ACCEL_INTERRUPT_MAPPING3                 (0x1B)      // Interrupt Mapping Register
-    #define BMA250_REG_ACCEL_INTERRUPT_DATA_SRC                 (0x1E)      // Interrupt Data Source Definition Register
-    #define BMA250_REG_ACCEL_INTERRUPT_ELEC_BEHAVE              (0x20)      // Interrupt Pin Electrical Behaviour Register
-    #define BMA250_REG_ACCEL_INTERRUPT_RESET_MODE               (0x21)      // Interrupt Reset and Mode Selection Register
-    #define BMA250_REG_ACCEL_INTERRUPT_DELAY_TIME_L             (0x22)      // Low-g Interrupt Delay Time Definition Register
-    #define BMA250_REG_ACCEL_INTERRUPT_THRESHOLD_H              (0x23)      // Low-g Interrupt Threshold Definition Register
-    #define BMA250_REG_ACCEL_INTERRUPT_HYSTERESIS               (0x24)      // Low-g Interrupt Hysteresis Definition Register
-    #define BMA250_REG_ACCEL_INTERRUPT_DELAY_TIME_H             (0x25)      // High-g Interrupt Delay Time Definition Register
-    #define BMA250_REG_ACCEL_INTERRUPT_THRESHOLD_H              (0x26)      // High-g Interrupt Threshold Definition Register
-    #define BMA250_REG_ACCEL_INTERRUPT_SAMPLE_NUMBER            (0x27)      // Slope Interrupt Samples Number Definition Register
-    #define BMA250_REG_ACCEL_INTERRUPT_THRESHOLD                (0x28)      // Slope Interrupt Threshold Definition Register
-    #define BMA250_REG_ACCEL_TAP_QUIET_SHOCK_DUR                (0x2A)      // Tap Quiet Duration and Tap Shock Duration Register
-    #define BMA250_REG_ACCEL_INTERRUPT_SAMPLE_NUMBER1           (0x2B)      // Wake-Up and Threshold Interrupt Samples Number Register
-    #define BMA250_REG_ACCEL_INTERRUPT_HYSTERESIS_ORIENT        (0x2C)      // Hysteresis, Blocking for Orientation Interrupt Register
-    #define BMA250_REG_ACCEL_THETA_BLOCK_ANGLE                  (0x2D)      // Theta Blocking Angle Register
-    #define BMA250_REG_ACCEL_FLAT_THRESHOLD_ANGLE               (0x2E)      // Flat Threshold Angle Register
-    #define BMA250_REG_ACCEL_SENSOR_SELF_TEST                   (0x32)      // Sensor Self-Test Activation Settings Register
-    #define BMA250_REG_ACCEL_EEPROM_CONTROL                     (0x33)      // EEPROM Control Settings Register
-    #define BMA250_REG_ACCEL_DIGITAL_INTERFACE                  (0x34)      // Digital Interface Settings Register
-    #define BMA250_REG_ACCEL_OFFSET_COMPENSATION_FAST           (0x36)      // Fast Offset Compensation Settings Register
-    #define BMA250_REG_ACCEL_OFFSET_COMPENSATION_SLOW           (0x37)      // Slow Offset Compensation Settings Register
-    #define BMA250_REG_ACCEL_FILTER_COMPENSATION_X              (0x38)      // Filtered Data Compensation Settings for X-Axis Register
-    #define BMA250_REG_ACCEL_FILTER_COMPENSATION_Y              (0x39)      // Filtered Data Compensation Settings for Y-Axis Register
-    #define BMA250_REG_ACCEL_FILTER_COMPENSATION_Z              (0x3A)      // Filtered Data Compensation Settings for Z-Axis Register
-    #define BMA250_REG_ACCEL_UNFILTER_COMPENSATION_X            (0x3B)      // Unfiltered Data Compensation Settings for X-Axis Register
-    #define BMA250_REG_ACCEL_UNFILTER_COMPENSATION_Y            (0x3C)      // Unfiltered Data Compensation Settings for Y-Axis Register
-    #define BMA250_REG_ACCEL_UNFILTER_COMPENSATION_Z            (0x3D)      // Unfiltered Data Compensation Settings for Z-Axis Register
+#define BMA250_X_AXIS_LSB_BIT          7
+#define BMA250_X_AXIS_LSB_LENGTH       2
+#define BMA250_X_NEW_DATA_BIT          0
 
-/**************************************************************************
-    ACCELEROMETER G-RANGE SELCTION REGISTER DESCRIPTION
-**************************************************************************/
-    #define BMA250_REG_ACCEL_G_RANGE_MASK                       (0x0F)      // Selection of the g-Range
-    #define BMA250_REG_ACCEL_G_RANGE_2G                         (0x03)      // g-Range: ± 2g
-    #define BMA250_REG_ACCEL_G_RANGE_4G                         (0x05)      // g-Range: ± 4g
-    #define BMA250_REG_ACCEL_G_RANGE_8G                         (0x08)      // g-Range: ± 8g
-    #define BMA250_REG_ACCEL_G_RANGE_16G                        (0x0C)      // g-Range: ± 16g
+#define BMA250_Y_AXIS_LSB_BIT          7
+#define BMA250_Y_AXIS_LSB_LENGTH       2
+#define BMA250_Y_NEW_DATA_BIT          0
 
-/**************************************************************************
-    ACCELEROMETER BANDWIDTH REGISTER DESCRIPTION
-**************************************************************************/
-    #define BMA250_REG_ACCEL_BANDWIDTH_BW_MASK                  (0x1F)      // Selection of the Bandwidth for the Acceleration Data
-    #define BMA250_REG_ACCEL_BANDWIDTH_BW_7_81HZ                (0x08)      // Bandwidth: 7.81 Hz
-    #define BMA250_REG_ACCEL_BANDWIDTH_BW_15_63HZ               (0x09)      // Bandwidth: 15.63 Hz
-    #define BMA250_REG_ACCEL_BANDWIDTH_BW_31_25HZ               (0x0A)      // Bandwidth: 31.25 Hz
-    #define BMA250_REG_ACCEL_BANDWIDTH_BW_62_5HZ                (0x0B)      // Bandwidth: 62.5 Hz
-    #define BMA250_REG_ACCEL_BANDWIDTH_BW_125HZ                 (0x0C)      // Bandwidth: 125 Hz
-    #define BMA250_REG_ACCEL_BANDWIDTH_BW_250HZ                 (0x0D)      // Bandwidth: 250 Hz
-    #define BMA250_REG_ACCEL_BANDWIDTH_BW_500HZ                 (0x0E)      // Bandwidth: 500 Hz
-    #define BMA250_REG_ACCEL_BANDWIDTH_BW_1000HZ                (0x0F)      // Bandwidth: 1000 Hz
+#define BMA250_Z_AXIS_LSB_BIT          7
+#define BMA250_Z_AXIS_LSB_LENGTH       2
+#define BMA250_Z_NEW_DATA_BIT          0
 
-typedef enum
-{
-    ACCEL_RANGE_2G                      = BMA250_REG_ACCEL_G_RANGE_2G,
-    ACCEL_RANGE_4G                      = BMA250_REG_ACCEL_G_RANGE_4G,
-    ACCEL_RANGE_8G                      = BMA250_REG_ACCEL_G_RANGE_8G,
-    ACCEL_RANGE_16G                     = BMA250_REG_ACCEL_G_RANGE_16G
-    
-} bmaAccelRange_t;
+/* range and bandwidth */
+#define BMA250_RANGE_2G                0x03
+#define BMA250_RANGE_4G                0x05
+#define BMA250_RANGE_8G                0x08
+#define BMA250_RANGE_16G               0x0C
 
-typedef enum
-{
-    ACCEL_BANDWIDTH_7_81HZ              = BMA250_REG_ACCEL_BANDWIDTH_BW_7_81HZ,
-    ACCEL_BANDWIDTH_15_63HZ             = BMA250_REG_ACCEL_BANDWIDTH_BW_15_63HZ,
-    ACCEL_BANDWIDTH_31_25HZ             = BMA250_REG_ACCEL_BANDWIDTH_BW_31_25HZ,
-    ACCEL_BANDWIDTH_62_5HZ              = BMA250_REG_ACCEL_BANDWIDTH_BW_62_5HZ,
-    ACCEL_BANDWIDTH_BW_125HZ            = BMA250_REG_ACCEL_BANDWIDTH_BW_125HZ,
-    ACCEL_BANDWIDTH_BW_250HZ            = BMA250_REG_ACCEL_BANDWIDTH_BW_250HZ,
-    ACCEL_BANDWIDTH_BW_500HZ            = BMA250_REG_ACCEL_BANDWIDTH_BW_500HZ,
-    ACCEL_BANDWIDTH_BW_1000HZ           = BMA250_REG_ACCEL_BANDWIDTH_BW_1000HZ
-    
-} bmaAccelBandwidth_t;
+#define BMA250_BW_MIN_HZ               0x00
+#define BMA250_BW_07_81HZ              0x08
+#define BMA250_BW_15_63HZ              0x09
+#define BMA250_BW_31_25HZ              0x0A
+#define BMA250_BW_62_50HZ              0x0C
+#define BMA250_BW_125HZ                0x0C
+#define BMA250_BW_250HZ                0x0D
+#define BMA250_BW_500HZ                0x0E
+#define BMA250_BW_MAX_HZ               0x1F
 
-typedef struct
-{
-    int16_t X;
-    int16_t Y;
-    int16_t Z;
-    
-} bmaSensorData_t;
+/* mode settings */
+#define BMA250_MODE_NORMAL             0
+#define BMA250_MODE_SLEEP              1
 
-
-class BMA250
-{
-    protected:
-        // Instance-specific properties
-        uint8_t bma_conversionDelay;
-        bmaAccelRange_t bma_accelrange;
-        bmaAccelBandwidth_t bma_accelbandwidth;
-    
+class BMA250 {
     public:
-        uint8_t bma_i2cAddress;
-        bmaSensorData_t bma_accelData;
-        void getAddr_BMA250(uint8_t i2cAddress);
-        bool begin(void);
-        void setUpSensor(void);
-        void Measure_Accelerometer(void);
-        void setAccelRange(bmaAccelRange_t accelrange);
-        bmaAccelRange_t getAccelRange(void);
-        void setAccelBandwidth(bmaAccelBandwidth_t accelbandwidth);
-        bmaAccelBandwidth_t getAccelBandwidth(void);
-    
-    private:
+        BMA250();
+        BMA250(uint8_t address);
+        
+        void initialize();
+        bool testConnection();
+        void reset();
+
+        // CHIP_ID register
+        uint8_t getDeviceID();
+        
+        // VERSION register
+        uint8_t getChipRevision();
+        
+        // AXIS registers
+        void getAcceleration(int16_t* x, int16_t* y, int16_t* z);
+        int16_t getAccelerationX();
+        int16_t getAccelerationY();
+        int16_t getAccelerationZ();
+        bool newDataX();
+        bool newDataY();
+        bool newDataZ();
+                
+        // TEMP register
+        int8_t getTemperature();
+        
+        // RANGE / BANDWIDTH registers
+        uint8_t getRange();
+        void setRange(uint8_t range);
+        uint8_t getBandwidth();
+        void setBandwidth(uint8_t bandwidth);
+        
+        // OFFS_GAIN registers
+        
+        // OFFSET registers
+        
+        private:
+        uint8_t devAddr;
+        uint8_t buffer[6];
+        uint8_t mode;
 };
+
+#endif /* _BMA250_H_ */
