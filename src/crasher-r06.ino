@@ -121,7 +121,7 @@ void setup()
     for(int i = 0; i < 4; i++)
     {
         PORTC >>= 1;
-        delay(1350);
+        delay(150);
     }
 
     // Load accelerometer parameters from eeprom
