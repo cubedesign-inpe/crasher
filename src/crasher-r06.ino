@@ -454,7 +454,33 @@ void loop()
                     if(G_counter < 4) G_counter++;
                 }
             }
-        break;
+            // any button pressed?
+            if (StateEvt & (EV_BTN_0 | EV_BTN_1))
+            {
+                    byte Data;
+                    // MAX G is stored as single byte, for atomic operations
+                    // 4 bits mantissa: 0..15
+                    // 4 bits decimal places: 0 .. 1/16
+                    // Thus leading to a max value of 16-(1/16) = 15.9375
+                    if(G_max > 15.9) Data = 0xFF; // 15+(15/16)
+                    else
+                    {
+                        // Fixed point value
+                        Data = (byte)(G_max * 16.0);
+                    }
+
+                    // Max G value
+                    MemWrite8(EE_MAXG, Data);
+                // go back to idle
+                State = ST_IDLE;
+
+                // Clear all leds
+                PORTC &= ~0x0F;
+
+                // blink within 500ms
+                Timer = millis() + 500;
+            }
+            break;
 
         /**********************************************************************************************
          * 
